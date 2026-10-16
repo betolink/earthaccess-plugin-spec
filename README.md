@@ -59,6 +59,20 @@ myplugin = "earthaccess_myplugin:MyPlugin"
 - Import your backend **inside methods**, never at module level, so plugin
   discovery stays cheap.
 - Only override `Job._poll` / `_fetch` / `_cancel` for a remote backend.
+- Override `_supports()` (returns a `Support`) to reject datasets you cannot
+  handle. A definite `Support(False, reason)` makes `request()` raise
+  `UnsupportedCollectionError` before any backend call. It is tri-state, so a
+  `None` ("could not tell") only warns. Users can bypass it with
+  `request(results, check=False)`.
+
+## Documentation
+
+The [docs hub](docs/index.md) explains the plugin system, the collection-support
+model, and has a guide and notebook per plugin:
+
+- [Plugin overview](docs/index.md)
+- [harmony](docs/plugins/harmony.md) · [pydap](docs/plugins/pydap.md) · [sliderule](docs/plugins/sliderule.md)
+- [Walkthrough notebook](docs/notebooks/plugins_overview.ipynb)
 
 ## Conformance suite
 
