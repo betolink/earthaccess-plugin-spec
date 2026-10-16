@@ -19,7 +19,7 @@ dependencies = [
 {{ cookiecutter.plugin_name }} = "{{ cookiecutter.plugin_module }}:{{ cookiecutter.plugin_class }}"
 
 [project.optional-dependencies]
-test = ["pytest >=8.0"]
+test = ["pytest >=8.0", "mypy >=1.11", "ruff >=0.6"]
 
 [project.urls]
 Repository = "https://github.com/{{ cookiecutter.github_user }}/{{ cookiecutter.distribution_name }}"
@@ -40,4 +40,4 @@ line-length = 88
 src = ["src", "tests"]
 
 [tool.ruff.lint]
-extend-select = ["I", "UP", "B"]
+select = ["E4", "E7", "E9", "F", "I", "UP", "B"]
