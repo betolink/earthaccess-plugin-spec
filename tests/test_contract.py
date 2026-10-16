@@ -72,10 +72,10 @@ class TestAsResultSet:
         # must detect it cheaply and never trigger that.
         class Lazy:
             @property
-            def collection_id(self):  # noqa: ANN202
+            def collection_id(self):
                 raise AssertionError("collection_id must not be read")
 
-            def umm(self):  # noqa: ANN201
+            def umm(self):
                 return []
 
         lazy = Lazy()
@@ -86,7 +86,7 @@ class TestAsResultSet:
             def __init__(self) -> None:
                 self.consumed = 0
 
-            def __iter__(self):  # noqa: ANN204
+            def __iter__(self):
                 for i in range(10):
                     self.consumed += 1
                     yield {
