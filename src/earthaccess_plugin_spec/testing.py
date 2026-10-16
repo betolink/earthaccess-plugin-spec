@@ -20,6 +20,7 @@ from .base import PluginBase
 from .context import PluginContext
 from .job import Job, JobStatus
 from .results import ResultSet
+from .support import Support
 
 __all__ = ["FakeAuth", "Fixtures", "fake_context", "run_conformance", "sample_result_set"]
 
@@ -61,17 +62,26 @@ class _StubResultSet:
         self,
         *,
         collection_id: str = "C1234-EXAMPLE",
+        short_name: str = "",
+        version: str = "1",
         ids: Sequence[str] = ("G1234-EXAMPLE",),
         native_ids: Sequence[str] = ("G1234.EXAMPLE",),
         umms: Sequence[dict] | None = None,
+        services: Sequence[dict] | None = None,
     ) -> None:
         self.collection_id = collection_id
+        self.short_name = short_name
+        self.version = version
         self.ids = list(ids)
         self.native_ids = list(native_ids)
         self._umms = list(umms) if umms is not None else [{"GranuleUR": "G1234.EXAMPLE"}]
+        self._services = list(services) if services else []
 
     def umm(self) -> Sequence[dict]:
         return self._umms
+
+    def services(self) -> Sequence[dict]:
+        return list(self._services)
 
 
 def sample_result_set(**kwargs: Any) -> ResultSet:
@@ -87,6 +97,8 @@ class Fixtures:
     result_set: ResultSet | None = field(default_factory=lambda: sample_result_set())
     options: dict[str, Any] = field(default_factory=dict)
     failing_options: dict[str, Any] | None = None
+    unsupported_result_set: Any = None
+    """A result set the plugin must reject, or ``None`` to skip the checks."""
 
     def context(self) -> PluginContext:
         return fake_context()
@@ -137,7 +149,22 @@ def run_conformance(plugin_cls: type[PluginBase], fixtures: Fixtures | None = No
     backend = fixtures.backend()
     backend.__enter__()
 
-    # 2. Unknown option names are rejected ------------------------------------
+    # 2. Support contract -----------------------------------------------------
+    def support_contract() -> None:
+        if fixtures.result_set is None:
+            return
+        support = plugin.supports(fixtures.result_set)
+        assert isinstance(support, Support), "supports() must return a Support"
+
+    check("support_contract", support_contract)
+
+    def reserved_options() -> None:
+        fields = getattr(getattr(plugin_cls, "Options", None), "__dataclass_fields__", {})
+        assert "check" not in fields, "'check' is a reserved option name"
+
+    check("reserved_options", reserved_options)
+
+    # 3. Unknown option names are rejected ------------------------------------
     def unknown_options() -> None:
         try:
             plugin.request(fixtures.result_set, __conformance_unknown__=1)
@@ -278,6 +305,44 @@ def run_conformance(plugin_cls: type[PluginBase], fixtures: Fixtures | None = No
         raise AssertionError("failing_options did not produce a failed job")
 
     check("failures_are_typed", failures_are_typed)
+
+    # 11. Unsupported collection raises early; check=False bypasses it ---------
+    def unsupported_raises() -> None:
+        from .errors import UnsupportedCollectionError
+
+        if fixtures.unsupported_result_set is None:
+            return
+        support = plugin.supports(fixtures.unsupported_result_set)
+        assert support.ok is False, (
+            f"unsupported_result_set must report ok=False, got {support.ok!r}"
+        )
+        try:
+            plugin.request(fixtures.unsupported_result_set, **fixtures.options)
+        except UnsupportedCollectionError:
+            return
+        except Exception as exc:
+            raise AssertionError(
+                f"expected UnsupportedCollectionError, got {type(exc).__name__}: {exc}"
+            ) from exc
+        raise AssertionError("request() must raise UnsupportedCollectionError")
+
+    check("unsupported_raises", unsupported_raises)
+
+    def check_bypasses() -> None:
+        from .errors import UnsupportedCollectionError
+
+        if fixtures.unsupported_result_set is None:
+            return
+        try:
+            plugin.request(
+                fixtures.unsupported_result_set, check=False, **fixtures.options
+            )
+        except UnsupportedCollectionError as exc:
+            raise AssertionError("check=False must bypass the support check") from exc
+        except Exception:  # noqa: BLE001, S110 - a backend error is acceptable here
+            pass
+
+    check("check_bypasses", check_bypasses)
 
     backend.__exit__(None, None, None)
 

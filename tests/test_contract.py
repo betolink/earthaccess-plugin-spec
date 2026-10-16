@@ -7,7 +7,10 @@ from earthaccess_plugin_spec import (
     NotSupportedError,
     PluginBase,
     ResultSet,
+    Support,
+    UnsupportedCollectionError,
     as_result_set,
+    list_services,
 )
 from earthaccess_plugin_spec.context import (
     LazyEDLAuthHandle,
@@ -17,9 +20,10 @@ from earthaccess_plugin_spec.context import (
 from earthaccess_plugin_spec.errors import JobFailedError
 from earthaccess_plugin_spec.job import Asset, Job, JobStatus
 from earthaccess_plugin_spec.results import GranuleResultSet
+from earthaccess_plugin_spec.support import ServiceRow, ServiceTable
 from earthaccess_plugin_spec.testing import fake_context, sample_result_set
 
-from .dummy import DummyAssetPlugin, DummyPlugin
+from .dummy import DummyAssetPlugin, DummyPlugin, GatedPlugin
 
 
 def granule(concept_id="G1", collection_id="C1", ur="G1.EXAMPLE", umm=None):
@@ -162,3 +166,101 @@ def test_default_context_uses_lazy_edl_handle():
     assert isinstance(ctx, PluginContext)
     assert isinstance(ctx.auth, LazyEDLAuthHandle)
     assert ctx.label == "earthaccess"
+
+
+class TestSupport:
+    def test_default_is_supported(self):
+        assert DummyPlugin(fake_context()).supports(sample_result_set()) == Support(True)
+
+    def test_unsupported_raises_before_request(self):
+        plugin = GatedPlugin(fake_context())
+        results = sample_result_set(collection_id="C-OTHER")
+        with pytest.raises(UnsupportedCollectionError) as excinfo:
+            plugin.request(results)
+        assert "does not support" in str(excinfo.value)
+        assert excinfo.value.collection_id == "C-OTHER"
+
+    def test_check_false_bypasses(self):
+        plugin = GatedPlugin(fake_context())
+        results = sample_result_set(collection_id="C-OTHER")
+        job = plugin.request(results, check=False)
+        assert job.results() == "ok"
+
+    def test_supports_is_cached_per_collection(self):
+        plugin = GatedPlugin(fake_context())
+        results = sample_result_set(collection_id="C1")
+        assert plugin.supports(results).ok is True
+        assert plugin.supports(results).ok is True
+        assert plugin.checks == 1
+
+    def test_check_is_reserved(self):
+        from dataclasses import dataclass
+
+        with pytest.raises(TypeError, match="reserved"):
+
+            @dataclass
+            class BadOptions:
+                check: bool = False
+
+            class BadPlugin(PluginBase):
+                name = "bad"
+                auth = "none"
+                output = "dataframe"
+                Options = BadOptions
+
+                def _request(self, results, options):
+                    return self.job(lambda: None)
+
+
+class TestGranuleResultSetExtras:
+    def test_short_name_and_version(self):
+        g = granule(umm={"GranuleUR": "G1", "CollectionReference": {"ShortName": "ATL06", "Version": "006"}})
+        rs = GranuleResultSet([g])
+        assert rs.short_name == "ATL06"
+        assert rs.version == "006"
+
+    def test_is_a_list(self):
+        rs = GranuleResultSet([granule()])
+        assert isinstance(rs, list)
+        assert len(rs) == 1
+
+    def test_slice_preserves_type_and_services(self):
+        rs = GranuleResultSet(
+            [granule(concept_id="g1"), granule(concept_id="g2")],
+            services=[{"Type": "Harmony", "Name": "svc"}],
+        )
+        sliced = rs[:1]
+        assert isinstance(sliced, GranuleResultSet)
+        assert len(sliced) == 1
+        assert sliced.services() == [{"Type": "Harmony", "Name": "svc"}]
+
+
+class TestListServices:
+    def test_table_renders(self):
+        table = ServiceTable(
+            [ServiceRow("harmony", False, "no service"), ServiceRow("sliderule", True)]
+        )
+        text = repr(table)
+        assert "plugin" in text and "harmony" in text and "sliderule" in text
+        assert table.accepting() == ["sliderule"]
+
+    def test_list_services_queries_installed(self, monkeypatch):
+        from earthaccess_plugin_spec import discovery
+
+        monkeypatch.setattr(
+            discovery, "installed_plugins", lambda group=None: {"gated": GatedPlugin}
+        )
+        table = list_services(sample_result_set(collection_id="C1"))
+        assert [row.plugin for row in table] == ["gated"]
+        assert table.rows[0].supported is True
+
+    def test_result_set_list_services(self, monkeypatch):
+        from earthaccess_plugin_spec import discovery
+
+        monkeypatch.setattr(
+            discovery, "installed_plugins", lambda group=None: {"gated": GatedPlugin}
+        )
+        rs = GranuleResultSet([granule(collection_id="C1")])
+        table = rs.list_services()
+        assert [row.plugin for row in table] == ["gated"]
+        assert table.rows[0].supported is True

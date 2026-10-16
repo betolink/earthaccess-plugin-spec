@@ -2,14 +2,15 @@
 
 Plugin authors subclass :class:`~earthaccess_plugin_spec.PluginBase`, declare an
 ``Options`` dataclass, and implement ``_request``. Remote backends also subclass
-:class:`~earthaccess_plugin_spec.Job`.
+:class:`~earthaccess_plugin_spec.Job`. Override ``_supports`` to reject
+collections the plugin cannot handle.
 
 Run the conformance suite from ``earthaccess_plugin_spec.testing`` in CI.
 """
 
 from __future__ import annotations
 
-from .base import PluginBase, validate_inputs
+from .base import PluginBase, accepting_plugins, validate_inputs
 from .context import AuthHandle, LazyEDLAuthHandle, PluginContext, default_context
 from .errors import (
     EarthaccessPluginError,
@@ -21,12 +22,13 @@ from .errors import (
     NotSupportedError,
     PluginLoadError,
     PluginNotFoundError,
+    UnsupportedCollectionError,
     UnsupportedOutputError,
 )
 from .job import Asset, Job, JobStatus
-from .results import GranuleResultSet, ResultSet, as_result_set
-
-CONTRACT_VERSION = 1
+from .results import GranuleResultSet, ResultSet, as_result_set, list_services
+from .support import ServiceRow, ServiceTable, Support
+from .version import CONTRACT_VERSION
 
 __all__ = [
     "CONTRACT_VERSION",
@@ -48,8 +50,14 @@ __all__ = [
     "PluginLoadError",
     "PluginNotFoundError",
     "ResultSet",
+    "ServiceRow",
+    "ServiceTable",
+    "Support",
+    "UnsupportedCollectionError",
     "UnsupportedOutputError",
+    "accepting_plugins",
     "as_result_set",
     "default_context",
+    "list_services",
     "validate_inputs",
 ]

@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
-from earthaccess_plugin_spec import Asset, PluginBase
+from earthaccess_plugin_spec import Asset, PluginBase, Support
 
 
 @dataclass
@@ -50,3 +50,25 @@ class DummyAssetPlugin(PluginBase):
             ]
 
         return self.job(work)
+
+
+class GatedPlugin(PluginBase):
+    name = "gated"
+    needs = frozenset({"concept_id"})
+    auth = "none"
+    output = "dataframe"
+    Options = Options
+    supported = frozenset({"C1"})
+
+    def __init__(self, ctx: Any) -> None:
+        super().__init__(ctx)
+        self.checks = 0
+
+    def _supports(self, results: Any) -> Support:
+        self.checks += 1
+        if results.collection_id in self.supported:
+            return Support(True)
+        return Support(False, f"{results.collection_id} is not supported")
+
+    def _request(self, results: Any, options: Any) -> Any:
+        return self.job(lambda: "ok")

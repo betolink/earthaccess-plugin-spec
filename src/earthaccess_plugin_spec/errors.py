@@ -18,6 +18,7 @@ __all__ = [
     "NotSupportedError",
     "PluginLoadError",
     "PluginNotFoundError",
+    "UnsupportedCollectionError",
     "UnsupportedOutputError",
 ]
 
@@ -48,6 +49,38 @@ class NotSupportedError(EarthaccessPluginError):
 
 class UnsupportedOutputError(EarthaccessPluginError):
     """Raised when a job's output kind cannot feed a requested operation."""
+
+
+class UnsupportedCollectionError(EarthaccessPluginError):
+    """Raised when a plugin definitely does not handle a collection.
+
+    Points the user at the plugins that do accept the results.
+    """
+
+    def __init__(
+        self,
+        plugin: str,
+        collection_id: str,
+        *,
+        short_name: str = "",
+        reason: str = "",
+        accepting: list[str] | None = None,
+    ) -> None:
+        self.plugin = plugin
+        self.collection_id = collection_id
+        self.short_name = short_name
+        self.reason = reason
+        self.accepting = list(accepting or [])
+        super().__init__(self._message())
+
+    def _message(self) -> str:
+        label = self.short_name or self.collection_id or "these results"
+        accepting = ", ".join(self.accepting) if self.accepting else "none"
+        return (
+            f"{self.plugin} does not support {label} ({self.collection_id}): "
+            f"{self.reason}. Plugins that accept these results: {accepting}. "
+            "See results.list_services()."
+        )
 
 
 class JobError(EarthaccessPluginError):
