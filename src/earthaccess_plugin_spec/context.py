@@ -13,14 +13,17 @@ __all__ = ["AuthHandle", "LazyEDLAuthHandle", "PluginContext", "default_context"
 class AuthHandle(Protocol):
     """Lazy access to Earthdata Login credentials.
 
-    ``session()`` returns an EDL-authenticated ``requests.Session`` and
-    ``token()`` returns a bearer token. Both log in on first use, and only when
-    a plugin actually asks for them.
+    ``session()`` returns an EDL-authenticated ``requests.Session``,
+    ``token()`` returns a bearer token and ``basic_auth()`` returns the
+    ``(username, password)`` pair when the login strategy provides one. All
+    log in on first use, and only when a plugin actually asks for them.
     """
 
     def session(self) -> Any: ...
 
     def token(self) -> str: ...
+
+    def basic_auth(self) -> tuple[str, str] | None: ...
 
 
 class LazyEDLAuthHandle:
@@ -51,6 +54,15 @@ class LazyEDLAuthHandle:
 
         self._ensure_login()
         return earthaccess.get_edl_token()
+
+    def basic_auth(self) -> tuple[str, str] | None:
+
+        auth = self._ensure_login()
+        username = getattr(auth, "username", None)
+        password = getattr(auth, "password", None)
+        if username and password:
+            return (username, password)
+        return None
 
 
 @dataclass

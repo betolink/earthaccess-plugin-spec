@@ -66,9 +66,12 @@ class GatedPlugin(PluginBase):
 
     def _supports(self, results: Any) -> Support:
         self.checks += 1
-        if results.collection_id in self.supported:
+        key = getattr(results, "collection_id", "") or getattr(
+            results, "short_name", ""
+        )
+        if key in self.supported:
             return Support(True)
-        return Support(False, f"{results.collection_id} is not supported")
+        return Support(False, reason=f"{key} is not supported")
 
     def _request(self, results: Any, options: Any) -> Any:
         return self.job(lambda: "ok")

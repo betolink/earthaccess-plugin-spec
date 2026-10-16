@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import warnings
+from dataclasses import replace
 from typing import Any, ClassVar, Literal
 
 from .context import PluginContext
@@ -14,14 +15,49 @@ from .errors import (
 )
 from .job import Job
 from .results import as_result_set
-from .support import Support
+from .support import Capabilities
 from .version import CONTRACT_VERSION
 
-__all__ = ["PluginBase", "accepting_plugins", "validate_inputs"]
+__all__ = ["PluginBase", "accepting_plugins", "validate_inputs", "as_target"]
 
 _NEEDS = {"concept_id": "ids", "native_id": "native_ids", "umm": "umm"}
 _RESERVED_OPTIONS = frozenset({"check"})
 _warned_unknown_support: set[tuple[str, str]] = set()
+
+
+class _ShortNameTarget:
+    """A results-like target for ``capabilities("ATL06")`` calls."""
+
+    def __init__(self, short_name: str) -> None:
+        self.short_name = short_name
+        self.version = ""
+        self.collection_id = ""
+        self.ids: list[str] = []
+        self.native_ids: list[str] = []
+
+    def umm(self) -> list[dict[str, Any]]:
+        return []
+
+    def services(self) -> list[dict[str, Any]]:
+        return []
+
+
+def as_target(target: Any) -> Any:
+    """Normalise a capability-check target: a short name, results, or ``None``."""
+
+    if target is None:
+        return None
+    if isinstance(target, str):
+        return _ShortNameTarget(target)
+    return as_result_set(target)
+
+
+def _collection_label(results: Any) -> str:
+    return (
+        getattr(results, "short_name", "")
+        or getattr(results, "collection_id", "")
+        or ""
+    )
 
 
 def validate_inputs(plugin: PluginBase, results: Any) -> None:
@@ -45,7 +81,7 @@ def validate_inputs(plugin: PluginBase, results: Any) -> None:
 
 
 def accepting_plugins(results: Any, exclude: Any = ()) -> list[str]:
-    """Names of installed plugins whose ``supports()`` returns a definite True."""
+    """Names of installed plugins whose capabilities are definitely supported."""
 
     from .context import default_context
     from .discovery import installed_plugins
@@ -54,13 +90,16 @@ def accepting_plugins(results: Any, exclude: Any = ()) -> list[str]:
     context = default_context()
     names: list[str] = []
     for name, plugin_cls in installed_plugins().items():
-        if name in excluded or getattr(plugin_cls, "contract_version", None) != CONTRACT_VERSION:
+        if (
+            name in excluded
+            or getattr(plugin_cls, "contract_version", None) != CONTRACT_VERSION
+        ):
             continue
         try:
-            support = plugin_cls(context).supports(results)
+            caps = plugin_cls(context).capabilities(results)
         except Exception:  # noqa: BLE001, S112 - a broken plugin must not mask the real error
             continue
-        if support.ok is True:
+        if caps.ok is True:
             names.append(name)
     return sorted(names)
 
@@ -82,8 +121,7 @@ def warn_once(plugin: str, collection_id: str, reason: str) -> None:
 class PluginBase:
     """Subclass this. Implement ``Options`` and ``_request``.
 
-    Optionally override ``_supports`` to reject collections the plugin cannot
-    handle.
+    Optionally override ``_supports`` to report the collection's capabilities.
     """
 
     name: ClassVar[str]
@@ -106,60 +144,81 @@ class PluginBase:
 
     def __init__(self, ctx: PluginContext) -> None:
         self._ctx = ctx
-        self._supports_cache: dict[str, Support] = {}
+        self._capabilities_cache: dict[str, Capabilities] = {}
 
     # --- implemented by the plugin ---
     def _request(self, results: Any, options: Any) -> Job:
         raise NotImplementedError
 
-    def _supports(self, results: Any) -> Support:
-        """Cheap, collection-level check. Default: the plugin handles everything."""
+    def _supports(self, results: Any) -> Capabilities:
+        """Cheap, collection-level capability check.
 
-        return Support(True)
+        Default: the plugin handles everything, with no extra detail.
+        """
+
+        return Capabilities(True)
 
     # --- provided by the contract ---
-    def supports(self, results: Any, *, check: bool = True) -> Support:
-        """Return the cached support answer for ``results``' collection."""
+    def capabilities(self, target: Any = None, *, check: bool = True) -> Capabilities:
+        """Return the collection's capabilities.
 
-        results = as_result_set(results)
+        ``target`` is search results or a collection short name. This is the
+        primary entry point; :meth:`supports` is an alias.
+        """
+
+        results = as_target(target)
         if results is None:
-            return Support(True)
-        key = getattr(results, "collection_id", "") or ""
-        if key and key in self._supports_cache:
-            return self._supports_cache[key]
+            return Capabilities(True, plugin=self.name)
+        key = getattr(results, "collection_id", "") or _collection_label(results)
+        if key and key in self._capabilities_cache:
+            return self._capabilities_cache[key]
         try:
-            support = self._supports(results)
+            caps = self._supports(results)
         except Exception as exc:  # noqa: BLE001 - never let a check crash a request
-            support = Support(None, f"support check failed: {exc!r}")
-        if not isinstance(support, Support):
-            support = Support(None, f"_supports returned {type(support).__name__}")
+            caps = Capabilities(None, reason=f"capability check failed: {exc!r}")
+        if not isinstance(caps, Capabilities):
+            caps = Capabilities(
+                None, reason=f"_supports returned {type(caps).__name__}"
+            )
+        caps = replace(
+            caps,
+            plugin=caps.plugin or self.name,
+            collection=caps.collection or _collection_label(results),
+        )
         if key:
-            self._supports_cache[key] = support
-        return support
+            self._capabilities_cache[key] = caps
+        return caps
+
+    def supports(self, target: Any = None, *, check: bool = True) -> Capabilities:
+        """Alias of :meth:`capabilities`."""
+
+        return self.capabilities(target, check=check)
 
     def job(self, fn: Any) -> Job:
         """Run ``fn`` in the shared background pool and return a local :class:`Job`."""
 
         return Job(fn, plugin=self.name, output=self.output)
 
-    def request(self, results: Any = None, *, check: bool = True, **options: Any) -> Job:
+    def request(
+        self, results: Any = None, *, check: bool = True, **options: Any
+    ) -> Job:
         """Validate inputs, check support, and return a :class:`Job` immediately."""
 
         # a plain list from search_data() becomes a GranuleResultSet
         results = as_result_set(results)
         validate_inputs(self, results)
         if check and results is not None:
-            support = self.supports(results)
-            if support.ok is False:
+            caps = self.capabilities(results)
+            if caps.ok is False:
                 raise UnsupportedCollectionError(
                     self.name,
                     results.collection_id,
                     short_name=getattr(results, "short_name", ""),
-                    reason=support.reason,
+                    reason=caps.reason,
                     accepting=accepting_plugins(results, exclude=self.name),
                 )
-            if support.ok is None:
-                warn_once(self.name, results.collection_id, support.reason)
+            if caps.ok is None:
+                warn_once(self.name, results.collection_id, caps.reason)
         # unknown kwargs raise TypeError here
         return self._request(results, self.Options(**options))
 

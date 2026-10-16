@@ -34,8 +34,8 @@ Plugins are written against two classes from
 [`earthaccess-plugin-spec`](https://github.com/betolink/earthaccess-plugin-spec):
 
 - **`PluginBase`** — subclass it, declare `Options` (a dataclass) and implement
-  `_request()`. Optionally override `_supports()` to reject datasets you cannot
-  handle.
+  `_request()`. Optionally override `_supports()` to report the collection's
+  capabilities.
 - **`Job`** — one class for both modes. Local work is `self.job(fn)`; a remote
   backend subclasses `Job` and overrides `_poll` / `_fetch` / `_cancel`.
 
@@ -49,28 +49,41 @@ job.results()      # blocks, returns the plugin's output
 ea.plugins.<name>.run(results, **options)             # request(...).results()
 ```
 
-## Collection support validation
+## Collection capabilities
 
 Passing results a plugin cannot handle fails early, before any backend call.
-Each plugin implements a cheap, collection-level `_supports()` check:
+Each plugin implements a cheap, collection-level `_supports()` check and reports
+a **`Capabilities`** object: a tri-state `ok` (`True`/`False`/`None`) plus the
+operations, output formats and (where relevant) server APIs it can use. There is
+a `Capability` enum (`subset_bbox`, `reproject`, `lazy_read`, `process`, ...).
 
-| Plugin | Evidence it uses | Network |
-| --- | --- | --- |
-| harmony | UMM-S service association, then the capabilities endpoint | one cached call |
-| pydap | OPeNDAP links already in the granule UMM | none |
-| sliderule | a hardcoded allowlist of dataset short names | none |
+| Plugin | Evidence it uses | Network | Reports |
+| --- | --- | --- | --- |
+| harmony | the capabilities endpoint | one cached call | subset/reproject/average/concatenate operations + formats |
+| pydap | OPeNDAP links already in the granule UMM | none | lazy read + dimension/variable subsetting |
+| sliderule | a hardcoded allowlist of dataset short names | none | processors (`apis`) + bbox/temporal subsetting |
 
 ```python
+>>> ea.plugins.harmony.supports(results)
+Capabilities('harmony supported ATL06', operations=3)
+  operations: subset_bbox, subset_temporal, subset_variable
+  formats: application/netcdf4
+
+>>> ea.plugins.sliderule.capabilities("ATL06")   # by short name, alias of supports
+Capabilities('sliderule supported ATL06', operations=3)
+  operations: process, subset_bbox, subset_temporal
+  apis: atl03sp, atl03x, atl06p, ... gedil4a
+
 >>> results.list_services()
 plugin     supported  detail
 --------   ---------  ------
-harmony    no         no Harmony service is associated with C1234567890-NSIDC_CPRD
+harmony    no         no Harmony service for C1234567890-NSIDC_CPRD
 pydap      yes
 sliderule  yes
 
 >>> ea.plugins.harmony.request(results, variables=["h_li"])
 UnsupportedCollectionError: harmony does not support ATL06 (C1234567890-NSIDC_CPRD):
-no Harmony service is associated with that collection.
+no Harmony service for that collection.
 Plugins that accept these results: sliderule, pydap. See results.list_services().
 ```
 

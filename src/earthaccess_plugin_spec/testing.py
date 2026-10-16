@@ -20,9 +20,15 @@ from .base import PluginBase
 from .context import PluginContext
 from .job import Job, JobStatus
 from .results import ResultSet
-from .support import Support
+from .support import Capabilities
 
-__all__ = ["FakeAuth", "Fixtures", "fake_context", "run_conformance", "sample_result_set"]
+__all__ = [
+    "FakeAuth",
+    "Fixtures",
+    "fake_context",
+    "run_conformance",
+    "sample_result_set",
+]
 
 _OUTPUTS = {"assets", "xarray", "dataframe"}
 _AUTHS = {"edl", "own", "none"}
@@ -50,6 +56,9 @@ class FakeAuth:
         self.token_calls += 1
         return "conformance-token"
 
+    def basic_auth(self) -> tuple[str, str]:
+        return ("conformance-user", "conformance-pass")
+
 
 def fake_context(label: str = "earthaccess-conformance") -> PluginContext:
     return PluginContext(auth=FakeAuth(), label=label)
@@ -74,7 +83,9 @@ class _StubResultSet:
         self.version = version
         self.ids = list(ids)
         self.native_ids = list(native_ids)
-        self._umms = list(umms) if umms is not None else [{"GranuleUR": "G1234.EXAMPLE"}]
+        self._umms = (
+            list(umms) if umms is not None else [{"GranuleUR": "G1234.EXAMPLE"}]
+        )
         self._services = list(services) if services else []
 
     def umm(self) -> Sequence[dict]:
@@ -114,7 +125,9 @@ def _missing_needs(plugin: type) -> set[str]:
     return needs - {"concept_id", "native_id", "umm"}
 
 
-def run_conformance(plugin_cls: type[PluginBase], fixtures: Fixtures | None = None) -> None:
+def run_conformance(
+    plugin_cls: type[PluginBase], fixtures: Fixtures | None = None
+) -> None:
     """Run the contract checks. Raises ``AssertionError`` listing every failure."""
 
     fixtures = fixtures or Fixtures()
@@ -136,7 +149,9 @@ def run_conformance(plugin_cls: type[PluginBase], fixtures: Fixtures | None = No
         )
         assert plugin_cls.output in _OUTPUTS, f"output must be one of {_OUTPUTS}"
         assert plugin_cls.auth in _AUTHS, f"auth must be one of {_AUTHS}"
-        assert isinstance(getattr(plugin_cls, "Options", None), type), "Options is required"
+        assert isinstance(getattr(plugin_cls, "Options", None), type), (
+            "Options is required"
+        )
         unknown = _missing_needs(plugin_cls)
         assert not unknown, f"unknown needs: {unknown}"
 
@@ -154,12 +169,20 @@ def run_conformance(plugin_cls: type[PluginBase], fixtures: Fixtures | None = No
         if fixtures.result_set is None:
             return
         support = plugin.supports(fixtures.result_set)
-        assert isinstance(support, Support), "supports() must return a Support"
+        assert isinstance(support, Capabilities), "supports() must return Capabilities"
+        # capabilities() is the alias of supports().
+        alias = plugin.capabilities(fixtures.result_set)
+        assert isinstance(alias, Capabilities), (
+            "capabilities() must return Capabilities"
+        )
+        assert alias.ok == support.ok, "capabilities() and supports() must agree"
 
     check("support_contract", support_contract)
 
     def reserved_options() -> None:
-        fields = getattr(getattr(plugin_cls, "Options", None), "__dataclass_fields__", {})
+        fields = getattr(
+            getattr(plugin_cls, "Options", None), "__dataclass_fields__", {}
+        )
         assert "check" not in fields, "'check' is a reserved option name"
 
     check("reserved_options", reserved_options)
@@ -221,9 +244,13 @@ def run_conformance(plugin_cls: type[PluginBase], fixtures: Fixtures | None = No
         assert isinstance(job, Job), "request() must return a Job"
         assert isinstance(job.id, str) and job.id, "job.id must be a non-empty string"
         assert job.plugin == plugin_cls.name, "job.plugin must match the plugin name"
-        assert job.output == plugin_cls.output, "job.output must match the plugin output"
+        assert job.output == plugin_cls.output, (
+            "job.output must match the plugin output"
+        )
         assert isinstance(job.resumable, bool), "job.resumable must be a bool"
-        assert isinstance(job.capabilities, frozenset), "job.capabilities must be a frozenset"
+        assert isinstance(job.capabilities, frozenset), (
+            "job.capabilities must be a frozenset"
+        )
 
     check("makes_job", makes_job)
 
@@ -270,7 +297,9 @@ def run_conformance(plugin_cls: type[PluginBase], fixtures: Fixtures | None = No
         info = job.info()
         assert "request" not in info, "info() must not leak the request payload"
         text = repr(job)
-        assert plugin_cls.name in text and job.id in text, "repr() must identify the job"
+        assert plugin_cls.name in text and job.id in text, (
+            "repr() must identify the job"
+        )
 
     check("info_and_repr", info_and_repr)
 

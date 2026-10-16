@@ -1,16 +1,46 @@
-"""Collection-support reporting: ``Support`` and the ``list_services`` table."""
+"""Collection-support reporting: ``Capabilities`` and the ``list_services`` table."""
 
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from enum import Enum
 from typing import Any
 
-__all__ = ["ServiceRow", "ServiceTable", "Support"]
+__all__ = [
+    "Capability",
+    "Capabilities",
+    "Support",
+    "ServiceRow",
+    "ServiceTable",
+]
+
+
+class Capability(str, Enum):
+    """An operation a plugin/service can perform on a collection.
+
+    The union of what the reference plugins expose; each plugin reports the
+    subset it supports.
+    """
+
+    LAZY_READ = "lazy_read"  # read slices without downloading (OPeNDAP)
+    SUBSET_BBOX = "subset_bbox"
+    SUBSET_TEMPORAL = "subset_temporal"
+    SUBSET_VARIABLE = "subset_variable"
+    SUBSET_DIMENSION = "subset_dimension"
+    SUBSET_SHAPE = "subset_shape"
+    REPROJECT = "reproject"
+    AVERAGE_TIME = "average_time"
+    AVERAGE_AREA = "average_area"
+    CONCATENATE = "concatenate"
+    PROCESS = "process"  # run an on-demand processor (SlideRule)
+
+    def __str__(self) -> str:
+        return self.value
 
 
 @dataclass(frozen=True)
-class Support:
-    """The result of a plugin's cheap, collection-level support check.
+class Capabilities:
+    """The result of a plugin's cheap, collection-level capability check.
 
     ``ok`` is tri-state on purpose: service associations and capabilities can
     lag reality, so ``None`` ("could not tell") must never hard-block a request
@@ -18,7 +48,66 @@ class Support:
     """
 
     ok: bool | None
+    plugin: str = ""
+    collection: str = ""
+    operations: frozenset[Capability] = frozenset()
+    formats: frozenset[str] = frozenset()
+    apis: frozenset[str] = frozenset()
     reason: str = ""
+
+    @property
+    def supported(self) -> bool | None:
+        return self.ok
+
+    def _label(self) -> str:
+        return {True: "supported", False: "unsupported", None: "unknown"}[self.ok]
+
+    def _title(self) -> str:
+        who = self.plugin or "plugin"
+        what = self.collection or "these results"
+        return f"{who} {self._label()} {what}"
+
+    def __str__(self) -> str:
+        lines = [self._title()]
+        if self.reason:
+            lines.append(f"  {self.reason}")
+        if self.operations:
+            lines.append(
+                "  operations: " + ", ".join(sorted(str(o) for o in self.operations))
+            )
+        if self.apis:
+            lines.append("  apis: " + ", ".join(sorted(self.apis)))
+        if self.formats:
+            lines.append("  formats: " + ", ".join(sorted(self.formats)))
+        return "\n".join(lines)
+
+    def __repr__(self) -> str:
+        return f"Capabilities({self._title()!r}, operations={len(self.operations)})"
+
+    def _repr_html_(self) -> str:
+        colour = {True: "#2e7d32", False: "#c62828", None: "#ef6c00"}[self.ok]
+        icon = {True: "\u2713", False: "\u2717", None: "?"}[self.ok]
+        parts = [
+            f"<div><b>{self.plugin or 'plugin'}</b> "
+            f'<span style="color:{colour}">{icon} {self._label()}</span> '
+            f"<code>{self.collection}</code>"
+        ]
+        if self.reason:
+            parts.append(f"<div><i>{self.reason}</i></div>")
+        for label, values in (
+            ("operations", sorted(str(o) for o in self.operations)),
+            ("apis", sorted(self.apis)),
+            ("formats", sorted(self.formats)),
+        ):
+            if values:
+                items = "".join(f"<li>{value}</li>" for value in values)
+                parts.append(f"<div>{label}:<ul>{items}</ul></div>")
+        parts.append("</div>")
+        return "".join(parts)
+
+
+# Backwards-compatible alias: the capability check replaced the old Support.
+Support = Capabilities
 
 
 @dataclass(frozen=True)
@@ -57,12 +146,16 @@ class ServiceTable:
             for i, cell in enumerate(row):
                 widths[i] = max(widths[i], len(str(cell)))
         lines = [
-            "  ".join(str(cell).ljust(widths[i]) for i, cell in enumerate(header)).rstrip(),
+            "  ".join(
+                str(cell).ljust(widths[i]) for i, cell in enumerate(header)
+            ).rstrip(),
             "  ".join("-" * widths[i] for i in range(len(header))),
         ]
         for row in body:
             lines.append(
-                "  ".join(str(cell).ljust(widths[i]) for i, cell in enumerate(row)).rstrip()
+                "  ".join(
+                    str(cell).ljust(widths[i]) for i, cell in enumerate(row)
+                ).rstrip()
             )
         return "\n".join(lines)
 

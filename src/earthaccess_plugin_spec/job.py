@@ -40,6 +40,7 @@ _STOP = {
 }
 
 _POOL = ThreadPoolExecutor(max_workers=4)
+_UNSET = object()
 
 
 @dataclass(frozen=True)
@@ -78,6 +79,7 @@ class Job:
         self._last = JobStatus.PENDING
         self._info: dict[str, Any] = {}
         self._exc: BaseException | None = None
+        self._result: Any = _UNSET
         self._future = _POOL.submit(fn) if fn is not None else None
 
     # --- default implementation = local work; remote backends override these. ---
@@ -122,6 +124,9 @@ class Job:
         return self._last
 
     def results(self) -> Any:
+        # Fetch at most once: repeated results()/ea.open(job) reuse the output.
+        if self._result is not _UNSET:
+            return self._result
         status = self.wait()
         if status is JobStatus.FAILED:
             raise JobFailedError(self.id, self._info) from self._exc
@@ -129,7 +134,8 @@ class Job:
             raise JobCanceledError(self.id)
         if status is JobStatus.PAUSED:
             raise JobPausedError(self.id)
-        return self._fetch()
+        self._result = self._fetch()
+        return self._result
 
     def cancel(self) -> bool:
         if "cancel" not in self.capabilities:

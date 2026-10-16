@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
-from earthaccess_plugin_spec import PluginBase, Support
+from earthaccess_plugin_spec import Capabilities, PluginBase
 
 
 class {{ cookiecutter.plugin_class }}(PluginBase):
@@ -19,10 +19,11 @@ class {{ cookiecutter.plugin_class }}(PluginBase):
         # TODO: declare the options this plugin accepts.
         pass
 
-    def _supports(self, results: Any) -> Support:
-        # Optional. Return Support(False, reason) to reject a collection early.
-        # This is the default: accept everything.
-        return Support(True)
+    def _supports(self, results: Any) -> Capabilities:
+        # Optional. Report the collection's capabilities. Return
+        # Capabilities(False, reason=...) to reject it early. This is the
+        # default: accept everything, with no extra detail.
+        return Capabilities(True)
 
     def _request(self, results: Any, options: Options) -> Any:
         # Import the backend inside the method so plugin discovery stays cheap.

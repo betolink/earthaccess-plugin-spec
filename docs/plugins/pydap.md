@@ -19,9 +19,17 @@ subset = ds["chlor_a"].sel(lat=slice(40, 50)).mean()
 The result is already a usable object, so `ea.open(job)` returns it as-is;
 nothing is downloaded until you compute with it.
 
-**Options:** `protocol` (`dap4`/`dap2`), `url_filter`, `combine`
-(`by_coords`/`nested`), `concat_dim`.
-**Output:** lazy `xarray.Dataset`.
+A single granule is kept lazy so the subset is pushed to the server; for several
+granules pass `chunks` sized to your subset. To navigate the remote file
+instead, ask for the native pydap dataset:
+
+```python
+ea.plugins.pydap.run(results, engine="pydap").tree()   # one per granule URL
+```
+
+**Options:** `engine` (`xarray`/`pydap`), `protocol` (`dap4`/`dap2`),
+`url_filter`, `combine` (`by_coords`/`nested`), `concat_dim`, `chunks`.
+**Output:** lazy `xarray.Dataset` (or native pydap dataset with `engine="pydap"`).
 **Auth:** Earthdata Login (the plugin uses your EDL session).
 
 Full guide and examples: [`earthaccess-plugin-pydap/README.md`](https://github.com/betolink/earthaccess-plugin-pydap).

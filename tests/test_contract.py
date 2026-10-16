@@ -3,6 +3,8 @@ import asyncio
 import pytest
 
 from earthaccess_plugin_spec import (
+    Capabilities,
+    Capability,
     MissingResultsError,
     NotSupportedError,
     PluginBase,
@@ -70,7 +72,11 @@ class TestLocalJob:
         plugin = DummyPlugin(fake_context())
         job = plugin.request(sample_result_set(), value=5)
         assert isinstance(job, Job)
-        assert job.status() in (JobStatus.PENDING, JobStatus.RUNNING, JobStatus.SUCCEEDED)
+        assert job.status() in (
+            JobStatus.PENDING,
+            JobStatus.RUNNING,
+            JobStatus.SUCCEEDED,
+        )
         assert job.wait(timeout=30) is JobStatus.SUCCEEDED
         assert job.status() is JobStatus.SUCCEEDED
         assert job.results() == {"value": 5}
@@ -148,6 +154,29 @@ class TestValidation:
             validate_inputs(UMMPlugin(), stub)
 
 
+class TestJobResultCaching:
+    def test_results_fetched_once(self):
+        class CountingJob(Job):
+            resumable = True
+
+            def __init__(self):
+                super().__init__(plugin="counting", output="dataframe")
+                self.fetches = 0
+
+            def _poll(self):
+                return JobStatus.SUCCEEDED, {"status": "successful"}
+
+            def _fetch(self):
+                self.fetches += 1
+                return ["asset"]
+
+        job = CountingJob()
+        first = job.results()
+        second = job.results()
+        assert first is second
+        assert job.fetches == 1
+
+
 class TestAssetPlugin:
     def test_assets_output(self):
         plugin = DummyAssetPlugin(fake_context())
@@ -170,7 +199,7 @@ def test_default_context_uses_lazy_edl_handle():
 
 class TestSupport:
     def test_default_is_supported(self):
-        assert DummyPlugin(fake_context()).supports(sample_result_set()) == Support(True)
+        assert DummyPlugin(fake_context()).supports(sample_result_set()).ok is True
 
     def test_unsupported_raises_before_request(self):
         plugin = GatedPlugin(fake_context())
@@ -208,13 +237,46 @@ class TestSupport:
                 output = "dataframe"
                 Options = BadOptions
 
-                def _request(self, results, options):
+                def _request(self, results, options):  # noqa: ANN001, ANN201
                     return self.job(lambda: None)
+
+    def test_capabilities_alias_accepts_short_name(self):
+        plugin = GatedPlugin(fake_context())
+        assert plugin.capabilities("C1").ok is True
+        assert plugin.capabilities("C-OTHER").ok is False
+
+    def test_supports_and_capabilities_agree(self):
+        plugin = GatedPlugin(fake_context())
+        results = sample_result_set(collection_id="C1")
+        assert plugin.supports(results).ok == plugin.capabilities(results).ok
+
+    def test_capabilities_repr_is_informative(self):
+        caps = Capabilities(
+            True,
+            plugin="harmony",
+            collection="ATL06",
+            operations=frozenset({Capability.SUBSET_BBOX, Capability.SUBSET_VARIABLE}),
+            formats=frozenset({"application/netcdf4"}),
+        )
+        assert isinstance(caps, Support)  # Support is the legacy alias
+        text = str(caps)
+        assert "harmony" in text and "ATL06" in text and "subset_bbox" in text
+        assert "harmony" in repr(caps)
+        assert "ATL06" in caps._repr_html_()
+
+    def test_capability_enum_values(self):
+        assert Capability.LAZY_READ == "lazy_read"
+        assert str(Capability.SUBSET_BBOX) == "subset_bbox"
 
 
 class TestGranuleResultSetExtras:
     def test_short_name_and_version(self):
-        g = granule(umm={"GranuleUR": "G1", "CollectionReference": {"ShortName": "ATL06", "Version": "006"}})
+        g = granule(
+            umm={
+                "GranuleUR": "G1",
+                "CollectionReference": {"ShortName": "ATL06", "Version": "006"},
+            }
+        )
         rs = GranuleResultSet([g])
         assert rs.short_name == "ATL06"
         assert rs.version == "006"

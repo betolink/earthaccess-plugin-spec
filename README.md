@@ -59,11 +59,13 @@ myplugin = "earthaccess_myplugin:MyPlugin"
 - Import your backend **inside methods**, never at module level, so plugin
   discovery stays cheap.
 - Only override `Job._poll` / `_fetch` / `_cancel` for a remote backend.
-- Override `_supports()` (returns a `Support`) to reject datasets you cannot
-  handle. A definite `Support(False, reason)` makes `request()` raise
+- Override `_supports()` (returns a `Capabilities`) to report what a collection
+  supports. A definite `Capabilities(False, reason=...)` makes `request()` raise
   `UnsupportedCollectionError` before any backend call. It is tri-state, so a
   `None` ("could not tell") only warns. Users can bypass it with
-  `request(results, check=False)`.
+  `request(results, check=False)`, ask a plugin directly with
+  `plugin.supports(results)` / `plugin.capabilities("ATL06")`, or list every
+  plugin's answer with `results.list_services()`.
 
 ## Documentation
 

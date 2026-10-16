@@ -27,13 +27,15 @@ from .errors import (
 )
 from .job import Asset, Job, JobStatus
 from .results import GranuleResultSet, ResultSet, as_result_set, list_services
-from .support import ServiceRow, ServiceTable, Support
+from .support import Capabilities, Capability, ServiceRow, ServiceTable, Support
 from .version import CONTRACT_VERSION
 
 __all__ = [
     "CONTRACT_VERSION",
     "Asset",
     "AuthHandle",
+    "Capabilities",
+    "Capability",
     "EarthaccessPluginError",
     "GranuleResultSet",
     "Job",
@@ -57,6 +59,7 @@ __all__ = [
     "UnsupportedOutputError",
     "accepting_plugins",
     "as_result_set",
+    "as_target",
     "default_context",
     "list_services",
     "validate_inputs",
