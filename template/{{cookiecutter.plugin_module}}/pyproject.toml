@@ -41,3 +41,17 @@ src = ["src", "tests"]
 
 [tool.ruff.lint]
 select = ["E4", "E7", "E9", "F", "I", "UP", "B"]
+
+[tool.mypy]
+python_version = "3.10"
+files = ["src", "tests"]
+disallow_untyped_defs = true
+pretty = true
+
+[[tool.mypy.overrides]]
+module = ["pytest", "pytest.*"{% if cookiecutter.backend_package %}, "{{ cookiecutter.backend_package }}", "{{ cookiecutter.backend_package }}.*"{% endif %}]
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = ["tests.*"]
+disallow_untyped_defs = false
