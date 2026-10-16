@@ -130,6 +130,19 @@ class TestValidation:
         with pytest.raises(NotSupportedError):
             plugin.get_job("abc")
 
+    def test_umm_need_is_called_not_truthy_method(self):
+        from earthaccess_plugin_spec import validate_inputs
+
+        class UMMPlugin:
+            name = "umm"
+            needs = frozenset({"umm"})
+            requires_results = True
+
+        stub = sample_result_set()
+        stub._umms = []
+        with pytest.raises(MissingResultsError, match="umm"):
+            validate_inputs(UMMPlugin(), stub)
+
 
 class TestAssetPlugin:
     def test_assets_output(self):

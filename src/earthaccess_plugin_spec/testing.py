@@ -132,6 +132,11 @@ def run_conformance(plugin_cls: type[PluginBase], fixtures: Fixtures | None = No
 
     plugin = plugin_cls(fixtures.context())
 
+    # Keep the backend patched for the whole run: a local job runs in a
+    # background thread and may not start until after request() returns.
+    backend = fixtures.backend()
+    backend.__enter__()
+
     # 2. Unknown option names are rejected ------------------------------------
     def unknown_options() -> None:
         try:
@@ -152,15 +157,14 @@ def run_conformance(plugin_cls: type[PluginBase], fixtures: Fixtures | None = No
             except MissingResultsError:
                 return
             raise AssertionError("expected MissingResultsError for results=None")
-        with fixtures.backend():
-            try:
-                plugin.request(None)
-            except MissingResultsError as exc:
-                raise AssertionError(
-                    "requires_results is False but results were demanded"
-                ) from exc
-            except Exception:  # noqa: BLE001, S110 - a backend error is acceptable here
-                pass
+        try:
+            plugin.request(None)
+        except MissingResultsError as exc:
+            raise AssertionError(
+                "requires_results is False but results were demanded"
+            ) from exc
+        except Exception:  # noqa: BLE001, S110 - a backend error is acceptable here
+            pass
 
     check("requires_results", requires_results)
 
@@ -186,8 +190,7 @@ def run_conformance(plugin_cls: type[PluginBase], fixtures: Fixtures | None = No
 
     def makes_job() -> None:
         nonlocal job
-        with fixtures.backend():
-            job = plugin.request(fixtures.result_set, **fixtures.options)
+        job = plugin.request(fixtures.result_set, **fixtures.options)
         assert isinstance(job, Job), "request() must return a Job"
         assert isinstance(job.id, str) and job.id, "job.id must be a non-empty string"
         assert job.plugin == plugin_cls.name, "job.plugin must match the plugin name"
@@ -264,8 +267,7 @@ def run_conformance(plugin_cls: type[PluginBase], fixtures: Fixtures | None = No
 
         if fixtures.failing_options is None:
             return
-        with fixtures.backend():
-            failed = plugin.request(fixtures.result_set, **fixtures.failing_options)
+        failed = plugin.request(fixtures.result_set, **fixtures.failing_options)
         status = failed.wait(timeout=120)
         if status is JobStatus.FAILED:
             try:
@@ -276,6 +278,8 @@ def run_conformance(plugin_cls: type[PluginBase], fixtures: Fixtures | None = No
         raise AssertionError("failing_options did not produce a failed job")
 
     check("failures_are_typed", failures_are_typed)
+
+    backend.__exit__(None, None, None)
 
     if failures:
         bullet = "\n".join(f" - {line}" for line in failures)

@@ -26,7 +26,10 @@ def validate_inputs(plugin: PluginBase, results: Any) -> None:
             raise MissingResultsError(f"{plugin.name} needs search results")
         return
     for need in plugin.needs:
-        if not getattr(results, _NEEDS[need], None):
+        value = getattr(results, _NEEDS[need], None)
+        if callable(value):
+            value = value()
+        if not value:
             raise MissingResultsError(
                 f"{plugin.name} needs {need!r}; these results do not provide it"
             )
