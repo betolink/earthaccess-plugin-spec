@@ -1,13 +1,15 @@
 """The results a plugin consumes: a protocol, an adapter and support listing.
 
-`search_data()` already returns full UMM, so nothing has to be hydrated here.
-`GranuleResultSet` is a ``list`` subclass so existing list-based code keeps
-working, while slicing preserves the type (and therefore the extra methods).
+A ``ResultSet`` may be **lazy**: iterating it streams the results from CMR (one
+bounded page at a time) and a plugin is responsible for paginating/projecting
+the few fields it needs rather than materializing everything. `GranuleResultSet`
+is a ``list`` subclass so existing list-based code keeps working, while slicing
+preserves the type (and therefore the extra methods).
 """
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Iterator, Mapping, Sequence
 from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
 
 from .support import ServiceRow, ServiceTable
@@ -21,7 +23,13 @@ __all__ = ["GranuleResultSet", "ResultSet", "as_result_set"]
 
 @runtime_checkable
 class ResultSet(Protocol):
-    """The minimal shape a plugin needs from search results."""
+    """The minimal shape a plugin needs from search results.
+
+    Iterate the resultset to consume it (it may be lazy and page in the results);
+    the ``collection_id``/``ids``/``native_ids``/``umm()`` accessors are
+    convenient shortcuts that may materialize the whole set, so plugins should
+    prefer iterating and projecting.
+    """
 
     collection_id: str
     """Concept id of the single collection the granules belong to."""
@@ -33,13 +41,17 @@ class ResultSet(Protocol):
     """Collection version (from the granule's UMM CollectionReference)."""
 
     ids: Sequence[str]
-    """Granule concept ids (``meta.concept-id``)."""
+    """Granule concept ids (``meta.concept-id``); may materialize the resultset."""
 
     native_ids: Sequence[str]
-    """Granule URs / names (``umm.GranuleUR``)."""
+    """Granule URs / names (``umm.GranuleUR``); may materialize the resultset."""
+
+    def __iter__(self) -> Iterator[Mapping[str, Any]]:
+        """Yield the raw granule records, streaming them if the set is lazy."""
+        ...
 
     def umm(self) -> Sequence[Mapping[str, Any]]:
-        """Return the raw UMM-G records."""
+        """Return the raw UMM-G records (may materialize the resultset)."""
         ...
 
     def services(self) -> Sequence[Mapping[str, Any]]:
@@ -94,9 +106,13 @@ class GranuleResultSet(list):
 
 
 def as_result_set(results: Any) -> Any:
-    """Wrap a plain list of granules, pass through a ResultSet or ``None``."""
+    """Wrap a plain list of granules, pass through a ResultSet or ``None``.
 
-    if results is None or hasattr(results, "collection_id"):
+    Detection is deliberately cheap: it never reads ``collection_id``, which a
+    lazy resultset computes by scanning the whole set.
+    """
+
+    if results is None or hasattr(results, "umm"):
         return results
     return GranuleResultSet(results)
 

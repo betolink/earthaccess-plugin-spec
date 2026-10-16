@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import warnings
+from collections.abc import Mapping
 from dataclasses import replace
 from typing import Any, ClassVar, Literal
 
@@ -20,7 +21,12 @@ from .version import CONTRACT_VERSION
 
 __all__ = ["PluginBase", "accepting_plugins", "validate_inputs", "as_target"]
 
-_NEEDS = {"concept_id": "ids", "native_id": "native_ids", "umm": "umm"}
+# Where each ``needs`` value lives in a raw granule record.
+_RECORD_FIELDS = {
+    "concept_id": ("meta", "concept-id"),
+    "native_id": ("umm", "GranuleUR"),
+    "umm": ("umm",),
+}
 _RESERVED_OPTIONS = frozenset({"check"})
 _warned_unknown_support: set[tuple[str, str]] = set()
 
@@ -34,6 +40,9 @@ class _ShortNameTarget:
         self.collection_id = ""
         self.ids: list[str] = []
         self.native_ids: list[str] = []
+
+    def __iter__(self) -> Any:
+        return iter(())
 
     def umm(self) -> list[dict[str, Any]]:
         return []
@@ -52,29 +61,52 @@ def as_target(target: Any) -> Any:
     return as_result_set(target)
 
 
+def _first_record(results: Any) -> Any:
+    """Peek the first granule record without materializing the resultset."""
+
+    try:
+        return next(iter(results), None)
+    except TypeError:
+        return None
+
+
+def _record_has(record: Any, need: str) -> bool:
+    value = record
+    for key in _RECORD_FIELDS[need]:
+        if not isinstance(value, Mapping):
+            return False
+        value = value.get(key)
+    return bool(value)
+
+
 def _collection_label(results: Any) -> str:
-    return (
-        getattr(results, "short_name", "")
-        or getattr(results, "collection_id", "")
-        or ""
-    )
+    """A human label for the collection, without materializing the resultset."""
+
+    short = getattr(results, "short_name", "") or ""
+    if short:
+        return short
+    record = _first_record(results)
+    if isinstance(record, Mapping):
+        return record.get("meta", {}).get("collection-concept-id", "") or ""
+    return ""
 
 
 def validate_inputs(plugin: PluginBase, results: Any) -> None:
     """Check the plugin's ``requires_results`` and ``needs`` against ``results``.
 
-    ``needs`` is checked, not fetched: ``search_data()`` already returns full UMM.
+    ``needs`` is checked, not fetched. We peek the first record instead of
+    materializing the resultset (which may be lazy).
     """
 
     if results is None:
         if plugin.requires_results:
             raise MissingResultsError(f"{plugin.name} needs search results")
         return
+    if not plugin.needs:
+        return
+    record = _first_record(results)
     for need in plugin.needs:
-        value = getattr(results, _NEEDS[need], None)
-        if callable(value):
-            value = value()
-        if not value:
+        if record is None or not _record_has(record, need):
             raise MissingResultsError(
                 f"{plugin.name} needs {need!r}; these results do not provide it"
             )
@@ -169,7 +201,7 @@ class PluginBase:
         results = as_target(target)
         if results is None:
             return Capabilities(True, plugin=self.name)
-        key = getattr(results, "collection_id", "") or _collection_label(results)
+        key = _collection_label(results)
         if key and key in self._capabilities_cache:
             return self._capabilities_cache[key]
         try:
@@ -216,13 +248,13 @@ class PluginBase:
             if caps.ok is False:
                 raise UnsupportedCollectionError(
                     self.name,
-                    results.collection_id,
+                    _collection_label(results),
                     short_name=getattr(results, "short_name", ""),
                     reason=caps.reason,
                     accepting=accepting_plugins(results, exclude=self.name),
                 )
             if caps.ok is None:
-                warn_once(self.name, results.collection_id, caps.reason)
+                warn_once(self.name, _collection_label(results), caps.reason)
         # unknown kwargs raise TypeError here
         return self._request(results, self.Options(**options))
 

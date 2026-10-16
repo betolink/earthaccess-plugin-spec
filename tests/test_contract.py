@@ -13,6 +13,7 @@ from earthaccess_plugin_spec import (
     UnsupportedCollectionError,
     as_result_set,
     list_services,
+    validate_inputs,
 )
 from earthaccess_plugin_spec.context import (
     LazyEDLAuthHandle,
@@ -65,6 +66,42 @@ class TestAsResultSet:
         wrapped = as_result_set([granule()])
         assert isinstance(wrapped, GranuleResultSet)
         assert isinstance(wrapped, ResultSet)
+
+    def test_as_result_set_does_not_read_collection_id(self):
+        # A lazy resultset computes collection_id by scanning; as_result_set
+        # must detect it cheaply and never trigger that.
+        class Lazy:
+            @property
+            def collection_id(self):  # noqa: ANN202
+                raise AssertionError("collection_id must not be read")
+
+            def umm(self):  # noqa: ANN201
+                return []
+
+        lazy = Lazy()
+        assert as_result_set(lazy) is lazy
+
+    def test_validate_inputs_peeks_a_single_record(self):
+        class Counting:
+            def __init__(self) -> None:
+                self.consumed = 0
+
+            def __iter__(self):  # noqa: ANN204
+                for i in range(10):
+                    self.consumed += 1
+                    yield {
+                        "meta": {"concept-id": f"G{i}"},
+                        "umm": {"GranuleUR": f"G{i}"},
+                    }
+
+        class Plugin:
+            name = "p"
+            needs = frozenset({"concept_id"})
+            requires_results = True
+
+        results = Counting()
+        validate_inputs(Plugin, results)
+        assert results.consumed == 1
 
 
 class TestLocalJob:

@@ -11,7 +11,7 @@ def test_conformance():
 from __future__ import annotations
 
 import contextlib
-from collections.abc import Sequence
+from collections.abc import Iterator, Sequence
 from contextlib import AbstractContextManager
 from dataclasses import dataclass, field
 from typing import Any
@@ -87,6 +87,17 @@ class _StubResultSet:
             list(umms) if umms is not None else [{"GranuleUR": "G1234.EXAMPLE"}]
         )
         self._services = list(services) if services else []
+
+    def __iter__(self) -> Iterator[dict]:
+        for index, umm in enumerate(self._umms):
+            concept_id = self.ids[index] if index < len(self.ids) else ""
+            yield {
+                "meta": {
+                    "concept-id": concept_id,
+                    "collection-concept-id": self.collection_id,
+                },
+                "umm": umm,
+            }
 
     def umm(self) -> Sequence[dict]:
         return self._umms
@@ -221,12 +232,15 @@ def run_conformance(
     def needs() -> None:
         from .errors import MissingResultsError
 
-        field_for = {"concept_id": "ids", "native_id": "native_ids", "umm": "umms"}
         for need in sorted(plugin_cls.needs):
-            stub = _StubResultSet()
-            setattr(stub, field_for[need], [])
-            if need == "umm":
-                stub._umms = []
+            if need == "concept_id":
+                # records carry no meta.concept-id
+                stub = _StubResultSet(ids=(), umms=[{"GranuleUR": "G1234.EXAMPLE"}])
+            elif need == "native_id":
+                # records carry a umm without a GranuleUR
+                stub = _StubResultSet(umms=[{}])
+            else:  # umm
+                stub = _StubResultSet(umms=[{}])
             try:
                 plugin.request(stub)
             except MissingResultsError:
