@@ -33,6 +33,10 @@ pip install earthaccess-plugin-spec
 pip install "earthaccess-plugin-spec[edl]"
 ```
 
+> **Not on PyPI yet.** For now install the contract and the plugins from GitHub,
+> together with the `plugin-spec` earthaccess branch — see
+> **[Installing the current drafts](docs/installing-drafts.md)**.
+
 ## Write a plugin
 
 Subclass `PluginBase` (always), declare `Options`, and implement `_request()`:
@@ -113,6 +117,8 @@ and earthaccess hands it straight back.
 
 ## Learn more
 
+- **[Installing the current drafts](docs/installing-drafts.md)** — install the
+  contract and plugins from GitHub (pre-release).
 - **[The full contract reference](docs/contract.md)** — `PluginBase` fields,
   `Job` hooks, `JobStatus`, capabilities, the lazy `ResultSet`, errors, and the
   conformance checks.

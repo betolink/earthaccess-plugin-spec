@@ -9,6 +9,9 @@ itself with earthaccess.
 pip install earthaccess-plugin-harmony   # or -pydap, -sliderule
 ```
 
+> **Pre-release:** the packages are not on PyPI yet — see
+> [Installing the current drafts](installing-drafts.md).
+
 Once installed, a plugin appears under `ea.plugins`:
 
 ```python
