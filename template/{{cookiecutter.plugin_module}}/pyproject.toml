@@ -12,8 +12,8 @@ requires-python = ">=3.10"
 authors = [{ name = "{{ cookiecutter.full_name }}", email = "{{ cookiecutter.email }}" }]
 dependencies = [
   "earthaccess-plugin-spec{{ cookiecutter.spec_version }}",
-  "{{ cookiecutter.backend_package }}",
-]
+{% if cookiecutter.backend_package %}  "{{ cookiecutter.backend_package }}",
+{% endif %}]
 
 [project.entry-points."earthaccess.plugins"]
 {{ cookiecutter.plugin_name }} = "{{ cookiecutter.plugin_module }}:{{ cookiecutter.plugin_class }}"
@@ -23,6 +23,10 @@ test = ["pytest >=8.0"]
 
 [project.urls]
 Repository = "https://github.com/{{ cookiecutter.github_user }}/{{ cookiecutter.distribution_name }}"
+
+# The contract lives on GitHub until it is published to PyPI.
+[tool.uv.sources]
+earthaccess-plugin-spec = { git = "https://github.com/betolink/earthaccess-plugin-spec.git", branch = "main" }
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/{{ cookiecutter.plugin_module }}"]

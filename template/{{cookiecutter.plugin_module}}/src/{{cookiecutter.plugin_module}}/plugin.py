@@ -21,8 +21,8 @@ class {{ cookiecutter.plugin_class }}(PluginBase):
 
     def _request(self, results: Any, options: Options) -> Any:
         # Import the backend inside the method so plugin discovery stays cheap.
-        # import {{ cookiecutter.backend_package }}
-
+{% if cookiecutter.backend_package %}        # import {{ cookiecutter.backend_package }}
+{% endif %}
         def work() -> Any:
             # TODO: call the backend and return the {{ cookiecutter.output }} output.
             raise NotImplementedError("implement {{ cookiecutter.plugin_class }}._request")
