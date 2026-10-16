@@ -43,7 +43,7 @@ addopts = "-ra"
 [tool.ruff]
 line-length = 88
 src = ["src", "tests"]
-extend-exclude = ["template"]
+extend-exclude = ["template", "docs"]
 
 [tool.ruff.lint]
 extend-select = ["I", "UP", "B", "SIM"]
