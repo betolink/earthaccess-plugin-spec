@@ -14,25 +14,27 @@ import xarray as xr
 
 results = ea.search_data(short_name="MUR-JPL-L4-GLOB-v4.1", ...)
 
-assets = ea.plugins.pydap.request(results, variables=["analysed_sst", "lat"]).results()
-urls = [a.href for a in assets]   # dap4://...?dap4.ce=/analysed_sst;/lat
+# Inspect a granule's variables with the native client.
+ea.plugins.pydap.request(results, client="pydap").results()[0].tree()
+
+# Ask for those variables: ea.open(job) returns the OPeNDAP DAP4 URLs with the
+# ?dap4.ce=... constraint.
+job = ea.plugins.pydap.request(results, variables=["analysed_sst", "lat"])
+urls = ea.open(job)
 
 session = ea.get_requests_https_session()
 ds = xr.open_mfdataset(urls, engine="pydap", session=session, combine="nested",
                        concat_dim="time", parallel=True, chunks={"lat": 400, "lon": 400})
-```
 
-With `client="pydap"` the job returns the native pydap datasets instead:
-
-```python
-ea.plugins.pydap.request(results, client="pydap").results()[0].tree()
+# or write the constrained data to local NetCDF:
+# ea.download(job, "./data")
 ```
 
 **Options:** `client` (`xarray` -> asset URLs / `pydap` -> native datasets),
 `protocol` (`dap4`/`dap2`), `variables` (DAP4 constraint), `url_filter`.
 **Output:** OPeNDAP asset URLs with a variable constraint, or native pydap
-datasets. earthaccess does not open or download OPeNDAP results; pass them to
-xarray.
+datasets. `ea.open(job)` returns the URLs; `ea.download(job, path)` serializes
+them to local NetCDF; `ea.virtualize` does not apply.
 **Auth:** Earthdata Login (the plugin uses your EDL session).
 
 Full guide and examples: [`earthaccess-plugin-pydap/README.md`](https://github.com/betolink/earthaccess-plugin-pydap).
