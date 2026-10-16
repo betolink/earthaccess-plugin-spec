@@ -48,7 +48,7 @@ class Asset:
     """A result file produced by a job."""
 
     href: str
-    access: Literal["https", "s3"]
+    access: Literal["https", "s3", "opendap"]
     auth: Literal["edl", "presigned", "none"] = "edl"
     format: Literal["netcdf4", "zarr", "geoparquet", "csv", "geotiff"] | None = None
 

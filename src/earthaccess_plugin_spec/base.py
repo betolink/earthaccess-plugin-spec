@@ -194,10 +194,14 @@ class PluginBase:
 
         return self.capabilities(target, check=check)
 
-    def job(self, fn: Any) -> Job:
-        """Run ``fn`` in the shared background pool and return a local :class:`Job`."""
+    def job(self, fn: Any, output: str | None = None) -> Job:
+        """Run ``fn`` in the shared background pool and return a local :class:`Job`.
 
-        return Job(fn, plugin=self.name, output=self.output)
+        ``output`` overrides the plugin's declared output for this job (for a
+        plugin whose result kind depends on the request).
+        """
+
+        return Job(fn, plugin=self.name, output=output or self.output)
 
     def request(
         self, results: Any = None, *, check: bool = True, **options: Any
