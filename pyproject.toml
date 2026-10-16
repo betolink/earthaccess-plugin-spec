@@ -1,0 +1,64 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "earthaccess-plugin-spec"
+version = "0.1.0"
+description = "The contract for earthaccess plugins: PluginBase, Job, and the conformance suite."
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.10"
+authors = [{ name = "earthaccess contributors" }]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Intended Audience :: Science/Research",
+  "License :: OSI Approved :: MIT License",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Topic :: Software Development :: Libraries",
+]
+dependencies = []
+
+[project.optional-dependencies]
+# Only needed when the default EDL auth handle is used.
+edl = ["earthaccess"]
+test = ["pytest >=8.0", "mypy >=1.11", "ruff >=0.6"]
+
+[project.urls]
+Repository = "https://github.com/betolink/earthaccess-plugin-spec"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/earthaccess_plugin_spec"]
+
+[tool.hatch.build.targets.sdist]
+include = ["src/earthaccess_plugin_spec", "template", "tests", "README.md", "LICENSE"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra"
+
+[tool.ruff]
+line-length = 88
+src = ["src", "tests"]
+extend-exclude = ["template"]
+
+[tool.ruff.lint]
+extend-select = ["I", "UP", "B", "SIM"]
+
+[tool.mypy]
+python_version = "3.10"
+files = ["src", "tests"]
+exclude = ["template"]
+disallow_untyped_defs = true
+pretty = true
+
+[[tool.mypy.overrides]]
+module = ["earthaccess", "earthaccess.*", "pytest", "pytest.*"]
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = ["tests.*"]
+disallow_untyped_defs = false

@@ -1,0 +1,39 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "{{ cookiecutter.distribution_name }}"
+version = "0.1.0"
+description = "{{ cookiecutter.description }}"
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.10"
+authors = [{ name = "{{ cookiecutter.full_name }}", email = "{{ cookiecutter.email }}" }]
+dependencies = [
+  "earthaccess-plugin-spec{{ cookiecutter.spec_version }}",
+  "{{ cookiecutter.backend_package }}",
+]
+
+[project.entry-points."earthaccess.plugins"]
+{{ cookiecutter.plugin_name }} = "{{ cookiecutter.plugin_module }}:{{ cookiecutter.plugin_class }}"
+
+[project.optional-dependencies]
+test = ["pytest >=8.0"]
+
+[project.urls]
+Repository = "https://github.com/{{ cookiecutter.github_user }}/{{ cookiecutter.distribution_name }}"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/{{ cookiecutter.plugin_module }}"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra"
+
+[tool.ruff]
+line-length = 88
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+extend-select = ["I", "UP", "B"]

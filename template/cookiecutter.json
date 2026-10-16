@@ -1,0 +1,17 @@
+{
+  "plugin_name": "example",
+  "plugin_class": "ExamplePlugin",
+  "plugin_module": "earthaccess_example",
+  "distribution_name": "earthaccess-example",
+  "description": "An earthaccess plugin for Example",
+  "backend_package": "example",
+  "output": ["assets", "xarray", "dataframe"],
+  "auth": ["edl", "own", "none"],
+  "needs": "concept_id",
+  "remote": ["no", "yes"],
+  "spec_version": ">=0.1.0",
+  "github_user": "betolink",
+  "full_name": "Luis López",
+  "email": "betolin@gmail.com",
+  "year": "2026"
+}
