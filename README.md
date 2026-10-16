@@ -3,16 +3,27 @@
 The contract that every [`earthaccess`](https://github.com/earthaccess-dev/earthaccess)
 plugin follows, plus a cookiecutter template and a conformance suite.
 
-`earthaccess` discovers plugins through the `earthaccess.plugins` entry-point
-group and drives them through two classes:
+## How earthaccess finds and loads a plugin
 
-- **`PluginBase` — always subclass it.** Declare `Options` (a dataclass) and
-  implement `_request()`.
-- **`Job` — subclass it only for a remote backend you poll.** Override
-  `_poll()` / `_fetch()` / `_cancel()`.
+Plugins register a class under the `earthaccess.plugins` **entry-point group**;
+installing the package is all it takes:
 
-In one line: subclass `PluginBase` always; return `self.job(fn)` for local work,
-and subclass `Job` only when you poll a remote backend.
+```toml
+[project.entry-points."earthaccess.plugins"]
+myplugin = "earthaccess_myplugin:MyPlugin"
+```
+
+Discovery reads distribution metadata only — it never imports a backend. A
+plugin module is imported the first time it is used:
+
+- `ea.list_plugins()` — the installed plugins (metadata only).
+- `ea.list_plugins(details=True)` — loads each plugin **module** (not its
+  backend) to report contract version, auth, output and needs.
+- `ea.plugins.myplugin` — loads `earthaccess_myplugin`, checks the
+  `contract_version`, and instantiates `MyPlugin` with a `PluginContext`.
+
+Because of this, **import your backend inside methods, never at module level**,
+so discovery and `list_plugins()` stay cheap.
 
 ## Install
 
@@ -23,6 +34,8 @@ pip install "earthaccess-plugin-spec[edl]"
 ```
 
 ## Write a plugin
+
+Subclass `PluginBase` (always), declare `Options`, and implement `_request()`:
 
 ```python
 from dataclasses import dataclass
@@ -44,19 +57,11 @@ class MyPlugin(PluginBase):
         return self.job(lambda: [Asset(href="s3://...", access="s3")])
 ```
 
-Register it:
-
-```toml
-[project.entry-points."earthaccess.plugins"]
-myplugin = "earthaccess_myplugin:MyPlugin"
-```
-
-`request(results, **options)` validates the inputs, runs `_supports()`, calls
-`_request()`, and returns a `Job` immediately.
-
 ## The Job
 
-However the backend behaves, the caller drives it the same way:
+`request(results, **options)` validates the inputs, runs `_supports()`, calls
+`_request()`, and returns a `Job` immediately. Callers drive every job the same
+way:
 
 ```python
 job = ea.plugins.myplugin.request(results, ...)
@@ -66,8 +71,6 @@ job.info()            # backend detail (a dict); never the request payload
 job.results()         # blocks until settled, then returns the output (or raises)
 job.wait(timeout=60)  # wait without fetching; returns the final status
 repr(job)             # never makes a network call
-
-# async mirrors: await job.astatus() / job.await_done() / job.aresults()
 ```
 
 There are three shapes to choose from:
@@ -78,11 +81,9 @@ There are three shapes to choose from:
 | **Local compute** | `return self.job(fn)` where `fn` does the work | SlideRule processing |
 | **Remote, polled** | subclass `Job`, override `_poll` / `_fetch` / `_cancel` | Harmony |
 
-For the first two, `self.job(fn)` runs `fn` in a background thread and the job
-completes on its own — a value in hand is just a function that returns
-immediately, and a local compute job is one that takes a while. `status()` is
-`PENDING`/`RUNNING` until it settles. Only a remote backend needs a `Job`
-subclass (see below).
+`self.job(fn)` runs `fn` in a background thread, so a value in hand is just a
+function that returns immediately and a local compute job is one that takes a
+while. Only a remote backend needs a `Job` subclass.
 
 ### When the job is done
 
@@ -93,89 +94,36 @@ subclass (see below).
 | `assets` | `list[Asset]` (files) | opened / downloaded by earthaccess |
 | `xarray`, `dataframe`, ... | whatever the plugin deems correct | `ea.open` returns it as-is; `download` is not supported |
 
-So if your job yields assets, users can `ea.open(job)` or `ea.download(job, path)`.
-For anything else, `results()` returns whatever makes sense for your backend — a
-lazy `xarray.Dataset`, a `GeoDataFrame`, native PyDAP datasets or OPeNDAP URLs,
-and so on — and earthaccess hands it straight back.
+If your job yields assets, users can open or download it. For anything else,
+`results()` returns whatever makes sense for your backend — a lazy
+`xarray.Dataset`, a `GeoDataFrame`, native PyDAP datasets, OPeNDAP URLs, ... —
+and earthaccess hands it straight back.
 
 ### The rules
 
 - `needs` is **checked, not fetched**: `search_data()` already returns full UMM.
-- `request()` returns a `Job` immediately; `results()` blocks and returns the output.
-- Import your backend **inside methods**, never at module level, so discovery stays cheap.
+- `request()` returns a `Job`; `results()` blocks and returns the output.
+- Import your backend **inside methods**, never at module level.
 - Subclass `Job` **only** for a remote backend.
 - Override `_supports()` (returns a `Capabilities`) to report what a collection
-  supports. A definite `Capabilities(False, reason=...)` makes `request()` raise
-  `UnsupportedCollectionError`; `None` ("could not tell") only warns. Users can
-  bypass it with `request(results, check=False)`, ask directly with
+  supports; a definite `False` makes `request()` raise
+  `UnsupportedCollectionError`. Users can bypass it with `check=False`, ask with
   `plugin.supports(results)` / `plugin.capabilities("ATL06")`, or list every
   plugin's answer with `results.list_services()`.
 
-## Remote backends (subclass `Job`)
+## Learn more
 
-Only a backend you poll needs this. Override the three hooks and set the class
-attributes:
-
-```python
-from earthaccess_plugin_spec import Job, JobStatus, PluginBase
-
-
-class MyJob(Job):
-    resumable = True                      # plugin.get_job(id) can rebuild it
-    capabilities = frozenset({"cancel"})  # a string means the method exists
-    poll_every = 2.0                      # seconds between polls
-
-    def __init__(self, job_id, client):
-        super().__init__(plugin="myplugin", output="assets", id=job_id)
-        self._client = client
-
-    def _poll(self):                      # one call -> (status, info)
-        info = self._client.status(self.id)
-        info.pop("request", None)         # never expose the payload
-        raw = info.get("status")
-        return {
-            "queued": JobStatus.PENDING,
-            "running": JobStatus.RUNNING,
-            "done": JobStatus.SUCCEEDED,
-        }.get(raw, JobStatus.RUNNING), info
-
-    def _fetch(self):                     # output of a settled job
-        return [Asset(href=u, access="s3") for u in self._client.result_urls(self.id)]
-
-    def _cancel(self):
-        self._client.cancel(self.id)
-        return True
-```
-
-In the plugin, submit and return it, and implement `get_job` for `resumable=True`:
-
-```python
-class MyPlugin(PluginBase):
-    ...
-    def _request(self, results, options):
-        client = ...                      # import your backend inside the method
-        return MyJob(client.submit(...), client)
-
-    def get_job(self, job_id):
-        return MyJob(job_id, ...)
-```
-
-## Documentation
-
-The [docs hub](docs/index.md) explains the plugin system, the collection-support
-model, and has a guide per plugin:
-
-- [Plugin overview](docs/index.md)
-- [harmony](docs/plugins/harmony.md) · [pydap](docs/plugins/pydap.md) · [sliderule](docs/plugins/sliderule.md)
+- **[The full contract reference](docs/contract.md)** — `PluginBase` fields,
+  `Job` hooks, `JobStatus`, capabilities, the lazy `ResultSet`, errors, and the
+  conformance checks.
+- [Plugin system overview](docs/index.md)
+- Per-plugin guides: [harmony](docs/plugins/harmony.md) ·
+  [pydap](docs/plugins/pydap.md) · [sliderule](docs/plugins/sliderule.md)
 
 ## Conformance suite
 
-Run the contract checks in your own test suite:
-
 ```python
 from earthaccess_plugin_spec.testing import Fixtures, run_conformance
-
-from earthaccess_myplugin import MyPlugin
 
 
 class MyFixtures(Fixtures):

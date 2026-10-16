@@ -40,6 +40,9 @@ Plugins are written against two classes from
   `Job` **only for a remote backend** that you poll, overriding `_poll` /
   `_fetch` / `_cancel` (and setting `resumable`/`capabilities`/`poll_every`).
 
+See the [full contract reference](contract.md) for the class fields, job hooks
+and errors.
+
 Every request follows the same shape regardless of backend:
 
 ```python
