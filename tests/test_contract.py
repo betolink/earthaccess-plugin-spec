@@ -145,7 +145,7 @@ class TestLocalJob:
 
     def test_run_blocks(self):
         plugin = DummyPlugin(fake_context())
-        assert plugin.run(sample_result_set(), value=3) == {"value": 3}
+        assert plugin.request(sample_result_set(), value=3).results() == {"value": 3}
 
     def test_async(self):
         plugin = DummyPlugin(fake_context())
@@ -217,7 +217,7 @@ class TestJobResultCaching:
 class TestAssetPlugin:
     def test_assets_output(self):
         plugin = DummyAssetPlugin(fake_context())
-        assets = plugin.run(sample_result_set(), count=3)
+        assets = plugin.request(sample_result_set(), count=3).results()
         assert len(assets) == 3
         assert all(isinstance(a, Asset) for a in assets)
         assert assets[0].access == "https"

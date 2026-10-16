@@ -54,8 +54,8 @@ myplugin = "earthaccess_myplugin:MyPlugin"
 ### The rules
 
 - `needs` is **checked, not fetched**. `search_data()` already returns full UMM.
-- `request()` returns a `Job` immediately. `results()` blocks. `run()` is
-  `request().results()`.
+- `request()` returns a `Job` immediately. `results()` blocks and returns the
+  plugin's output.
 - Import your backend **inside methods**, never at module level, so plugin
   discovery stays cheap.
 - Only override `Job._poll` / `_fetch` / `_cancel` for a remote backend.

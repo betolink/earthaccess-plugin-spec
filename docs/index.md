@@ -46,7 +46,6 @@ job = ea.plugins.<name>.request(results, **options)   # returns immediately
 job.status()       # PENDING / RUNNING / PAUSED / SUCCEEDED / PARTIAL / FAILED / CANCELED
 job.info()         # backend detail; never the request payload
 job.results()      # blocks, returns the plugin's output
-ea.plugins.<name>.run(results, **options)             # request(...).results()
 ```
 
 ## Collection capabilities

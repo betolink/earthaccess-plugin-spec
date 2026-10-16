@@ -258,11 +258,6 @@ class PluginBase:
         # unknown kwargs raise TypeError here
         return self._request(results, self.Options(**options))
 
-    def run(self, results: Any = None, *, check: bool = True, **options: Any) -> Any:
-        """``request().results()``: block until the job settles and return its output."""
-
-        return self.request(results, check=check, **options).results()
-
     def get_job(self, job_id: str) -> Job:
         """Rebuild a resumable remote job from its id. Overridden by remote plugins."""
 
@@ -272,8 +267,3 @@ class PluginBase:
         self, results: Any = None, *, check: bool = True, **options: Any
     ) -> Job:
         return await asyncio.to_thread(self.request, results, check=check, **options)
-
-    async def arun(
-        self, results: Any = None, *, check: bool = True, **options: Any
-    ) -> Any:
-        return await asyncio.to_thread(self.run, results, check=check, **options)

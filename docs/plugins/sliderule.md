@@ -15,12 +15,12 @@ import earthaccess as ea
 ea.plugins.sliderule.configure(url="https://slideruleearth.io", organization="my-org")
 
 results = ea.search_data(short_name="ATL06", bounding_box=(-120, 40, -110, 45))
-df = ea.plugins.sliderule.run(
+df = ea.plugins.sliderule.request(
     results,
     api="atl06p",
     parms={"pass_invalid": False},
     aoi={"type": "Polygon", "coordinates": [[[...]]]},
-)
+).results()
 ```
 
 The searched granules scope the request; you can also run from `aoi` + `parms`

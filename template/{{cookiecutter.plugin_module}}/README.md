@@ -32,7 +32,7 @@ pytest
 - `name = "{{ cookiecutter.plugin_name }}"`, `output = "{{ cookiecutter.output }}"`,
   `auth = "{{ cookiecutter.auth }}"`, `needs = { {{ cookiecutter.needs }} }`.
 - Import `{{ cookiecutter.backend_package }}` inside methods, never at module level.
-- `request()` returns a `Job`; `results()` blocks; `run()` is `request().results()`.
+- `request()` returns a `Job`; `results()` blocks and returns the output.
 
 ## License
 
