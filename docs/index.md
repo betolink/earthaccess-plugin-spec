@@ -33,11 +33,12 @@ assets = ea.open(job)             # or ea.download(job, "./data")
 Plugins are written against two classes from
 [`earthaccess-plugin-spec`](https://github.com/betolink/earthaccess-plugin-spec):
 
-- **`PluginBase`** — subclass it, declare `Options` (a dataclass) and implement
-  `_request()`. Optionally override `_supports()` to report the collection's
-  capabilities.
-- **`Job`** — one class for both modes. Local work is `self.job(fn)`; a remote
-  backend subclasses `Job` and overrides `_poll` / `_fetch` / `_cancel`.
+- **`PluginBase`** — **always** subclass it, declare `Options` (a dataclass) and
+  implement `_request()`. Optionally override `_supports()` to report the
+  collection's capabilities.
+- **`Job`** — one class for both modes. Local work is `self.job(fn)`. Subclass
+  `Job` **only for a remote backend** that you poll, overriding `_poll` /
+  `_fetch` / `_cancel` (and setting `resumable`/`capabilities`/`poll_every`).
 
 Every request follows the same shape regardless of backend:
 

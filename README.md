@@ -4,12 +4,18 @@ The contract that every [`earthaccess`](https://github.com/earthaccess-dev/earth
 plugin follows, plus a cookiecutter template and a conformance suite.
 
 `earthaccess` discovers plugins through the `earthaccess.plugins` entry-point
-group and drives them through the two classes defined here:
+group and drives them through the two classes defined here. A plugin author
+writes:
 
-- **`PluginBase`** — subclass this. Declare `Options` (a dataclass) and implement
-  `_request()`.
-- **`Job`** — one concrete class. Local work is `self.job(fn)`. Subclass it only
-  when you poll a remote backend (for example Harmony).
+- **a `PluginBase` subclass — always.** Declare `Options` (a dataclass) and
+  implement `_request()`. Local work is `self.job(fn)`.
+- **a `Job` subclass — only for a remote backend** that you poll. Override
+  `_poll()`, `_fetch()` and (if you can cancel) `_cancel()`, and set
+  `resumable` / `capabilities` / `poll_every`.
+
+Both are re-exported from `earthaccess_plugin_spec`. The rule in one line:
+subclass `PluginBase` always; subclass `Job` only when you poll a remote backend,
+otherwise return `self.job(fn)`.
 
 The full rationale lives in the earthaccess plugin plan. This package is the
 executable version of that contract.
@@ -49,6 +55,57 @@ Register it:
 ```toml
 [project.entry-points."earthaccess.plugins"]
 myplugin = "earthaccess_myplugin:MyPlugin"
+```
+
+### Remote backends: subclass `Job`
+
+If your backend runs asynchronously and you have to poll it (like Harmony), you
+also subclass `Job` and override the three hooks. A local job never needs this.
+
+```python
+from earthaccess_plugin_spec import Job, JobStatus, PluginBase
+
+
+class MyJob(Job):
+    resumable = True                              # plugin.get_job(id) rebuilds it
+    capabilities = frozenset({"cancel"})          # a string means the method exists
+    poll_every = 2.0                              # seconds between polls
+
+    def __init__(self, job_id, client):
+        super().__init__(plugin="myplugin", output="assets", id=job_id)
+        self._client = client
+
+    def _poll(self):                              # one call -> (status, info)
+        info = self._client.status(self.id)
+        info.pop("request", None)                 # never expose the payload
+        return {"queued": JobStatus.PENDING,
+                "running": JobStatus.RUNNING,
+                "done": JobStatus.SUCCEEDED}.get(info.get("status"), JobStatus.RUNNING), info
+
+    def _fetch(self):                             # output of a settled job
+        return [Asset(href=url, access="s3") for url in self._client.result_urls(self.id)]
+
+    def _cancel(self):
+        self._client.cancel(self.id)
+        return True
+
+
+class MyPlugin(PluginBase):
+    name = "myplugin"
+    needs = frozenset({"concept_id"})
+    auth = "edl"
+    output = "assets"
+
+    @dataclass
+    class Options:
+        format: str = "netcdf4"
+
+    def _request(self, results, options):
+        client = ...                              # import your backend inside the method
+        return MyJob(client.submit(...), client)
+
+    def get_job(self, job_id):
+        return MyJob(job_id, ...)                 # resumable=True requires this
 ```
 
 ### The rules
