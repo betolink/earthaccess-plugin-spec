@@ -12,7 +12,7 @@ client, and xarray opens PyDAP responses with `engine="pydap"`, giving a lazy
 import earthaccess as ea
 
 results = ea.search_data(short_name="MODISA_L2_OC", ...)
-ds = ea.plugins.pydap.open(results, protocol="dap4")   # lazy xarray.Dataset
+ds = ea.plugins.pydap.request(results, protocol="dap4").results()  # lazy xarray.Dataset
 subset = ds["chlor_a"].sel(lat=slice(40, 50)).mean()
 ```
 
@@ -24,7 +24,7 @@ granules pass `chunks` sized to your subset. To navigate the remote file
 instead, ask for the native pydap dataset:
 
 ```python
-ea.plugins.pydap.run(results, engine="pydap").tree()   # one per granule URL
+ea.plugins.pydap.request(results, engine="pydap").results().tree()  # one per granule URL
 ```
 
 **Options:** `engine` (`xarray`/`pydap`), `protocol` (`dap4`/`dap2`),
