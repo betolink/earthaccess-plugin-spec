@@ -377,13 +377,17 @@ def run_conformance(
         if fixtures.unsupported_result_set is None:
             return
         try:
-            plugin.request(
+            job = plugin.request(
                 fixtures.unsupported_result_set, check=False, **fixtures.options
             )
         except UnsupportedCollectionError as exc:
             raise AssertionError("check=False must bypass the support check") from exc
         except Exception:  # noqa: BLE001, S110 - a backend error is acceptable here
-            pass
+            return
+        # Join the job while the backend is still patched. A local job runs in a
+        # background thread and would otherwise start after fixtures.backend() is
+        # torn down, importing the real backend (e.g. the real `sliderule`).
+        job.wait(timeout=120)
 
     check("check_bypasses", check_bypasses)
 
